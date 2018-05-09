@@ -1,0 +1,95 @@
+---
+title: "Practical_Machine_Learning_Project"
+author: "Bowen Liang"
+date: "May 8, 2018"
+output: html_document
+---
+
+## Project Overview
+### Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+The training data for this project are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+### Goal
+This project is to quantify how well peopel do a particular activity by using data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. The goal here is to predict manner where people did the exercise using the "classe" variable in the training set.
+
+## Data Processing
+We first load the requried libraries and read the csv files into R environment.
+```{r echo=TRUE}
+# load the required packages
+library(caret) 
+library(rpart) 
+library(rpart.plot)
+library(randomForest)
+
+set.seed(12345)
+
+trainingData <- read.csv("pml-training.csv", na.strings = c("NA", ""))
+testingData <- read.csv("pml-testing.csv", na.strings = c("NA", ""))
+```
+It can be seen that the raw training data set has 19622 observations and 160 variables, while the test data has 20 observations and 160 variables.
+
+## Data cleaning
+It can be seen that there are missing NA values throughout the data set, and it should be removed from the modeling. Further, the first seven variables are just basic information and timestamps for the individuals, and should also be removed. 
+```{r echo=TRUE}
+# clean the data
+index_col_NAs = which(colSums(is.na(trainingData))>0) 
+trainingDataClean <- trainingData[,-index_col_NAs]
+trainingDataClean <- trainingDataClean[,-c(1:7)]
+
+# do the same transformation to the testing data set
+testingDataClean <- testingData[,-index_col_NAs]
+testingDataClean <- testingDataClean[,-c(1:7)]
+```
+
+## Data partitioning
+Partion the training data set into two data sets: 70% for a training set and 30% for a validation set. 
+```{r echo=TRUE}
+index_train <- createDataPartition(trainingDataClean$classe, p = 0.7, list = FALSE)
+train_data <- trainingDataClean[index_train, ]
+validate_data <- trainingDataClean[-index_train, ]
+
+```
+
+## Modeling
+### Classification Tree
+I will first use the classification tree to predict the outcome with 5-fold cross validation.
+```{r echo=TRUE}
+controlRf <- trainControl(method="cv", 5)
+fit_rpart <- train(classe ~ ., data=train_data, method="rpart", trControl=controlRf)
+fit_rpart
+```
+
+Then the performance of the predictive model can be tested on the validation data set.
+```{r echo=TRUE}
+predict_rpart <- predict(fit_rpart, validate_data)
+confusionMatrix(validate_data$classe, predict_rpart)
+```
+It can be seen that the accuracy is only 0.5, meaning the expected out of sample error is also around 0.5. This proves that classification tree does not predict the outcome well.
+
+### Random Forest
+Here random forest model is used to the training data set, and predict the outcome on the validation data set. 
+```{r echo=TRUE}
+fit_rf <- train(classe ~ ., data=train_data, method="rf", trControl=controlRf)
+fit_rf
+predictRf <- predict(fit_rf, validate_data)
+confusionMatrix(validate_data$classe, predictRf)
+
+plot(fit_rf,main="Accuracy of Random forest model by number of predictors")
+```
+Now the accuracy is 0.9886, and the out-of-sample error is 0.0114 with 5-fold cross validation. This performance is much better than the classification tree model, and will be used to predict the results on 20 different test cases.
+
+## Prediction on 20 Test Data
+Since random forest model is proven to provide the best performance, it's used here to predict the values of classe for the test data set.
+```{r echo=TRUE}
+final_prediction <- predict(fit_rf, testingDataClean)
+final_prediction
+```
+
